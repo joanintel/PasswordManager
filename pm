@@ -10,14 +10,14 @@ from functions.pm_funcs import (
     delete_entry,
     search_entries,
     get_entry,
-    edit_entry,      # ADD THIS
-    copy_password,    # ADD THIS
+    edit_entry,      
+    copy_password,   
     show_stats,
     update_master_password 
 
 )
 from functions import colors as cl
-from functions.help import show_help  # assume you have this for command help
+from functions.help import show_help 
 
 def main():
     # Derive key and ensure storage

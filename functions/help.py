@@ -44,5 +44,4 @@ def show_help():
     print(f"{cl.cyan}\n💡 TIPS:{cl.reset}")
     print(f"  • Use {cl.green}copy{cl.reset} instead of {cl.green}get{cl.reset} to avoid showing password on screen")
     print(f"  • Run {cl.green}backup{cl.reset} weekly to keep your vault safe")
-    print(f"  • Use {cl.green}categories{cl.reset} to organize work/personal passwords")
     print(f"  • Check {cl.green}strength{cl.reset} periodically for weak passwords\n")

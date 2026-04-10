@@ -6,8 +6,8 @@ from Crypto.Hash import SHA256
 
 # --- Constants ---
 KDF_ITERATIONS = 200_000
-KEY_LENGTH = 32  # 256-bit AES key
-NONCE_LENGTH = 12  # AES-GCM recommended
+KEY_LENGTH = 32  #256-bit AES key
+NONCE_LENGTH = 12  #AES-GCM recommended
 
 
 def generate_salt(length=16):
