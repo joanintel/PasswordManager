@@ -5,11 +5,54 @@ from getpass import getpass
 from functions.encr import derive_key, generate_salt, decrypt_data, encrypt_data
 from functions import colors as cl
 
+
+import time
+import tempfile
+import pickle
+
+
+
+
+
 # Storage paths
 PM_DIR = Path.home() / ".pm"
 VAULT_FILE = PM_DIR / "vault.json"
 SALT_FILE = PM_DIR / "salt.bin"
 CONFIG_FILE = PM_DIR / "config.json"
+SESSION_FILE = Path(tempfile.gettempdir()) / ".pm_session"
+
+
+def save_session(key, timeout_minutes=10):
+    """Save decrypted key temporarily with expiration"""
+    session_data = {
+        "key": key,
+        "expires_at": time.time() + (timeout_minutes * 60)
+    }
+    with open(SESSION_FILE, "wb") as f:
+        pickle.dump(session_data, f)
+
+def get_session():
+    """Get cached key if still valid"""
+    if not SESSION_FILE.exists():
+        return None
+    
+    try:
+        with open(SESSION_FILE, "rb") as f:
+            session_data = pickle.load(f)
+        
+        if time.time() < session_data["expires_at"]:
+            return session_data["key"]
+        else:
+            SESSION_FILE.unlink()
+            return None
+    except:
+        return None
+
+def clear_session():
+    """Clear cached session"""
+    if SESSION_FILE.exists():
+        SESSION_FILE.unlink()
+
 
 
 def ensure_storage():
@@ -43,28 +86,37 @@ def ensure_storage():
             json.dump(config, f, indent=4)
         print(f"[+] Created config file.")
 
-    # --- Vault (first time setup) ---
+    # --- Vault (create if doesn't exist) ---
     if not VAULT_FILE.exists():
         with open(VAULT_FILE, "w") as f:
             json.dump([], f, indent=4)
         print(f"[+] Created vault file: {VAULT_FILE}")
 
-    # --- Master password ---
-    # Check if this is first time (vault is empty/initial state OR we just created it)
-    is_first_time = False
-    
-    # Read vault to check if it's the initial empty JSON or encrypted
+    # --- Check for valid session cache ---
+    cached_key = get_session()
+    if cached_key is not None:
+        # Test cached key works
+        try:
+            with open(VAULT_FILE, "rb") as f:
+                encrypted_data = f.read()
+            test_decrypt = decrypt_data(encrypted_data, cached_key)
+            print(f"{cl.green}[+] Using cached session (valid for remaining time){cl.reset}")
+            return cached_key
+        except:
+            clear_session()  # Cached key invalid
+
+    # --- Check if vault is encrypted or still plaintext ---
+    is_encrypted = False
     try:
         with open(VAULT_FILE, "rb") as f:
             raw_data = f.read()
-            # If file starts with '{' or '[', it's plaintext JSON (first time, not encrypted yet)
-            if raw_data and (raw_data[0] == ord('{') or raw_data[0] == ord('[')):
-                is_first_time = True
+            if raw_data and raw_data[0] not in (ord('{'), ord('[')):
+                is_encrypted = True
     except:
         pass
 
-    if is_first_time or not VAULT_FILE.exists():
-        # First time setup - create new master password
+    # If vault is not encrypted, this is first-time setup
+    if not is_encrypted:
         print(f"{cl.cyan}First time setup - Create your master password{cl.reset}")
         master_password = getpass("Enter master password: ").strip()
         confirm_password = getpass("Confirm master password: ").strip()
@@ -79,18 +131,20 @@ def ensure_storage():
         
         key = derive_key(master_password, salt)
         
-        # Encrypt the empty vault immediately
-        from functions.encr import encrypt_data
+        # Encrypt the empty vault
         empty_vault = []
         encrypted_vault = encrypt_data(empty_vault, key)
         with open(VAULT_FILE, "wb") as f:
             f.write(encrypted_vault)
         print(f"{cl.green}[+] Vault encrypted and saved.{cl.reset}")
         
+        # Save session
+        save_session(key)
+        
         return key
     
     else:
-        # Existing vault - verify master password
+        # Vault is encrypted - verify master password
         max_attempts = 3
         for attempt in range(max_attempts):
             master_password = getpass(f"Enter master password (attempt {attempt + 1}/{max_attempts}): ").strip()
@@ -102,6 +156,10 @@ def ensure_storage():
                     encrypted_data = f.read()
                 test_decrypt = decrypt_data(encrypted_data, key)
                 print(f"{cl.green}[+] Authentication successful{cl.reset}")
+                
+                # Save session for future commands
+                save_session(key)
+                
                 return key
             except ValueError as e:
                 if "MAC check failed" in str(e):
@@ -114,6 +172,7 @@ def ensure_storage():
                     sys.exit(1)
         
         return key  # Should never reach here
+
 
 
 def load_vault(key):
